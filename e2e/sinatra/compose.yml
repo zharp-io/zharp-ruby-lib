@@ -11,6 +11,8 @@ services:
     extra_hosts: ["host.docker.internal:host-gateway"]
     command: sh -c 'bundle install --quiet && bundle exec unicorn -c unicorn.rb config.ru'
     ports: ["3191:3000"]
-    healthcheck: { test: ["CMD", "ruby", "-rnet/http", "-e", "Net::HTTP.get(URI('http://127.0.0.1:3000/carts/1'))"], interval: 3s, retries: 100 }
+    healthcheck: { test: ["CMD", "ruby", "-rnet/http", "-e", "Net::HTTP.get(URI('http://127.0.0.1:3000/carts/1'))"], interval: 3s, retries: 100, start_period: 900s }
 volumes:
   bundle:
+    external: true
+    name: zharp-e2e-bundle-rb40

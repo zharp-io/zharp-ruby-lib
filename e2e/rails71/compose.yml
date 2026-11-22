@@ -32,3 +32,5 @@ services:
 
 volumes:
   bundle:
+    external: true
+    name: zharp-e2e-bundle-rb33

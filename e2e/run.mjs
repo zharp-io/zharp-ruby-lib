@@ -14,7 +14,17 @@ const here = dirname(fileURLToPath(import.meta.url));
 const API = process.env.ZHARP_API ?? 'http://localhost:3000/api/v1';
 const token = (process.env.ZHARP_TOKEN ?? readFileSync(process.env.ZHARP_TOKEN_FILE, 'utf8')).trim();
 const H = { Authorization: `Bearer ${token}`, 'x-workspace-id': process.env.ZHARP_WORKSPACE ?? '3', 'content-type': 'application/json' };
-const api = async (path, init = {}) => (await fetch(`${API}/${path}`, { headers: H, ...init })).json();
+/** The backend may be restarted by others while a case runs: each call is tried a few times. */
+async function api(path, init = {}) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await (await fetch(`${API}/${path}`, { headers: H, ...init })).json();
+    } catch (error) {
+      if (attempt >= 6) throw error;
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+  }
+}
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const out = join(here, 'out');
 mkdirSync(out, { recursive: true });
@@ -36,6 +46,8 @@ for (const name of process.argv.slice(2)) {
   const env = { ...process.env, ZHARP_KEY: app.ingestKey, ZHARP_ENDPOINT: 'http://host.docker.internal:3000/api/v1/otlp', COMPOSE_PROJECT_NAME: `zharp-e2e-${name}` };
   const compose = (args, opts = {}) => spawnSync('docker', ['compose', ...args], { cwd: dir, env, encoding: 'utf8', ...opts });
   const result = { app: app.id, platform: app.platform };
+  // Gems are kept between runs in one volume per Ruby version (the first install takes minutes).
+  for (const m of readFileSync(join(dir, 'compose.yml'), 'utf8').matchAll(/name: (zharp-e2e-bundle-\S+)/g)) execSync(`docker volume create ${m[1]}`);
   try {
     if (kase.compose !== false && kase.up !== false) {
       const up = compose(['up', '-d', '--wait', ...(kase.services ?? [])], { timeout: 900_000 });

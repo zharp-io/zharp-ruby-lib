@@ -11,3 +11,5 @@ services:
     command: sh -c 'gem install -N bundler -v "~> 4.0" >/dev/null && bundle install --quiet && ruby import.rb'
 volumes:
   bundle:
+    external: true
+    name: zharp-e2e-bundle-rb33

@@ -12,3 +12,5 @@ services:
     command: sh -c 'bundle install --quiet && ruby worker.rb'
 volumes:
   bundle:
+    external: true
+    name: zharp-e2e-bundle-rb40

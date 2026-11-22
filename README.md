@@ -130,10 +130,16 @@ A browser or mobile app using a Zharp SDK sends its user and session with each r
 No Ruby needed on the host: everything runs in Docker.
 
 ```sh
-docker run --rm -v "$PWD:/src" -w /src ruby:3.4 sh -c "bundle install && bundle exec rake"
-e2e/run.sh unit        # Ruby 3.3 / 3.4 / 4.0 × Rails 7.1 / 7.2 / 8.1
-e2e/run.sh rails81     # an end-to-end case against a Zharp backend (see e2e/README.md)
+docker run --rm -v "$PWD:/src" -w /src ruby:3.4 sh -c "gem install bundler && bundle install && bundle exec rake"
+e2e/unit.sh                 # unit tests: Ruby 3.3 / 3.4 / 4.0 × no Rails, Rails 7.1 / 7.2 / 8.1
+e2e/generator.sh 3.4 8.1.0  # rails new, bundle add zharp, the generator, boot
+# End-to-end against a Zharp backend: a throwaway app per case, its docker compose stack, what
+# Zharp stored saved in e2e/out/<case>.json. Cases: rails81 rails71 sinatra rack hanami script semantic.
+ZHARP_API=http://localhost:3000/api/v1 ZHARP_TOKEN=<user JWT> ZHARP_WORKSPACE=<id> node e2e/run.mjs rails81
 ```
+
+Use Bundler 2.7 or newer: with the Bundler 2.6 that Ruby 3.4's image ships, resolving
+`opentelemetry-instrumentation-all` can take many minutes.
 
 ## License
 
