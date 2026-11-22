@@ -91,8 +91,9 @@ module Zharp
     # Watches query spans: their failure when they end, and the end of the request or job they ran
     # in. send.call(error, stack, attributes, span_context) reports what nothing else claimed.
     class Processor
-      def initialize(send)
+      def initialize(send, queries: true)
         @send = send
+        @queries = queries
         @lock = Mutex.new
         @held = {}
         @pending = {}
@@ -100,11 +101,21 @@ module Zharp
       end
 
       # Called by the patched Span#record_exception. True when held.
+      #
+      # A query span's exception, and any exception leaving a span inside a request or job (Active
+      # Record's User.create!, an HTTP call, a span of your own): it may still be rescued by the app.
+      # It is reported by whatever sees it escape the request or job (then with its query), or, when
+      # nothing does, as handled when the request or job ends. Server and job spans, and spans with
+      # no local parent, report at once.
       def hold(span, error)
-        return false unless DbErrors.first(span.attributes, DB_SYSTEM)
+        return false if span.kind == :server || span.kind == :consumer
 
-        site = caller_locations(2) || []
-        @lock.synchronize { @held[span.context.span_id] ||= [error, site] }
+        span_id = span.context.span_id
+        return false if @lock.synchronize { @local_roots.key?(span_id) }
+
+        query = @queries && DbErrors.first(span.attributes, DB_SYSTEM)
+        site = query ? (caller_locations(2) || []) : nil
+        @lock.synchronize { @held[span_id] ||= [error, site] }
         true
       end
 
@@ -126,7 +137,11 @@ module Zharp
         held = @lock.synchronize { @held.delete(span_id) }
         if held && span.status.code == ::OpenTelemetry::Trace::Status::ERROR
           error, site = held
-          add(trace_id, Failure.new(error, DbErrors.app_frames(site), DbErrors.query_attributes(span.attributes, error), span.context, false))
+          if site
+            add(trace_id, Failure.new(error, DbErrors.app_frames(site), DbErrors.query_attributes(span.attributes, error), span.context, false))
+          else
+            add(trace_id, Failure.new(error, nil, {}, span.context, false))
+          end
         end
         root = @lock.synchronize { @local_roots.delete(span_id) }
         return unless root || span.kind == :server || span.kind == :consumer
@@ -149,8 +164,13 @@ module Zharp
         @lock.synchronize do
           failures = (@pending[trace_id] ||= [])
           mine = Errors.related(failure.error)
-          # The same failure seen by two instrumentations: once.
-          return if failures.any? { |f| mine.include?(f.error) || Errors.related(f.error).include?(failure.error) }
+          # The same failure seen by two spans (the query, then Active Record's around it): once,
+          # as the outermost exception the app saw, with the query and call site of the first.
+          same = failures.find { |f| mine.include?(f.error) || Errors.related(f.error).include?(failure.error) }
+          if same
+            same.error = failure.error if mine.size > Errors.related(same.error).size
+            return
+          end
 
           failures << failure
           @pending.shift if @pending.size > MAX_PENDING
@@ -183,9 +203,14 @@ module Zharp
           next if f.done || Errors.reported?(f.error)
 
           attributes = f.attributes.dup
-          code = Source.context_of(f.frames.map { |l| [l.path, l.absolute_path || l.path, l.lineno] })
-          attributes[Source::ATTRIBUTE] = code if code
-          @send.call(f.error, DbErrors.format_stack(f.frames, f.error), attributes, f.span_context)
+          if f.frames
+            # A query: where the app ran it (the driver's exception has no app frames of its own).
+            code = Source.context_of(f.frames.map { |l| [l.path, l.absolute_path || l.path, l.lineno] })
+            attributes[Source::ATTRIBUTE] = code if code
+            @send.call(f.error, DbErrors.format_stack(f.frames, f.error), attributes, f.span_context)
+          else
+            @send.call(f.error, nil, attributes, f.span_context)
+          end
         rescue StandardError => e
           Zharp.debug("db errors: #{e.message}")
         end

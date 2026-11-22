@@ -17,6 +17,25 @@ module Zharp
       "OpenTelemetry::Instrumentation::ActiveJob" => { propagation_style: :child }
     }.freeze
 
+    # Root spans: the share sample_rate keeps, except a Redis command with nothing around it
+    # (Sidekiq's heartbeat and poller, Action Cable's pings), which would be a trace every few
+    # seconds that says nothing. Redis inside a request or job is traced as usual.
+    class Sampler
+      DROP = ::OpenTelemetry::SDK::Trace::Samplers::Result.new(decision: ::OpenTelemetry::SDK::Trace::Samplers::Decision::DROP, tracestate: ::OpenTelemetry::Trace::Tracestate::DEFAULT)
+
+      def initialize(root)
+        @root = root
+      end
+
+      def should_sample?(trace_id:, parent_context:, links:, name:, kind:, attributes:)
+        return DROP if kind == :client && attributes && (attributes["db.system"] || attributes["db.system.name"]) == "redis"
+
+        @root.should_sample?(trace_id: trace_id, parent_context: parent_context, links: links, name: name, kind: kind, attributes: attributes)
+      end
+
+      def description = "ZharpSampler{#{@root.description}}"
+    end
+
     module_function
 
     def start(options, exporters: nil, batch: true)
@@ -29,22 +48,20 @@ module Zharp
         tracer_provider = ::OpenTelemetry::SDK::Trace::TracerProvider.new(
           resource: resource,
           sampler: ::OpenTelemetry::SDK::Trace::Samplers.parent_based(
-            root: ::OpenTelemetry::SDK::Trace::Samplers.trace_id_ratio_based(options.sample_rate)
+            root: Sampler.new(::OpenTelemetry::SDK::Trace::Samplers.trace_id_ratio_based(options.sample_rate))
           )
         )
         tracer_provider.add_span_processor(Context::SpanProcessor.new)
-        if options.capture_query_errors
-          # Before the exporter, so a failed query's held exception is reported before its trace ships.
-          Errors.db_errors = DbErrors::Processor.new(method(:send_query_error))
-          tracer_provider.add_span_processor(Errors.db_errors)
-        end
-        tracer_provider.add_span_processor(batch ? ::OpenTelemetry::SDK::Trace::Export::BatchSpanProcessor.new(span_exporter) : ::OpenTelemetry::SDK::Trace::Export::SimpleSpanProcessor.new(span_exporter))
+        # Before the exporter, so a held exception is reported before its trace ships.
+        Errors.db_errors = DbErrors::Processor.new(method(:send_held_error), queries: options.capture_query_errors)
+        tracer_provider.add_span_processor(Errors.db_errors)
+        tracer_provider.add_span_processor(batch ? ::OpenTelemetry::SDK::Trace::Export::BatchSpanProcessor.new(span_exporter, start_thread_on_boot: false) : ::OpenTelemetry::SDK::Trace::Export::SimpleSpanProcessor.new(span_exporter))
         ::OpenTelemetry.tracer_provider = tracer_provider
       end
 
       logger_provider = ::OpenTelemetry::SDK::Logs::LoggerProvider.new(resource: resource)
       logger_provider.add_log_record_processor(Context::LogProcessor.new)
-      logger_provider.add_log_record_processor(batch ? ::OpenTelemetry::SDK::Logs::Export::BatchLogRecordProcessor.new(log_exporter) : ::OpenTelemetry::SDK::Logs::Export::SimpleLogRecordProcessor.new(log_exporter))
+      logger_provider.add_log_record_processor(batch ? ::OpenTelemetry::SDK::Logs::Export::BatchLogRecordProcessor.new(log_exporter, start_thread_on_boot: false) : ::OpenTelemetry::SDK::Logs::Export::SimpleLogRecordProcessor.new(log_exporter))
       ::OpenTelemetry.logger_provider = logger_provider
 
       ::OpenTelemetry.propagation = ::OpenTelemetry::Context::Propagation::CompositeTextMapPropagator.compose_propagators(
@@ -139,14 +156,15 @@ module Zharp
       Logs.install_semantic_logger
     end
 
-    # A failed query nothing else reported: caught by the app, in the query's span.
-    def send_query_error(error, stack, attributes, span_context)
+    # An exception held on a span inside a request or job that nothing reported: the app caught
+    # it. A failed query carries its query and the app's call site as its stack.
+    def send_held_error(error, stack, attributes, span_context)
       return if Errors.reported?(error)
 
       Errors.mark(error)
       attrs = Errors.attributes(error, true).merge(attributes)
-      attrs["exception.stacktrace"] = stack
-      attrs["zharp.mechanism"] = "db"
+      attrs["exception.stacktrace"] = stack if stack
+      attrs["zharp.mechanism"] = "db" if attributes.key?("db.system")
       context = ::OpenTelemetry::Trace.context_with_span(::OpenTelemetry::Trace.non_recording_span(span_context))
       Logs.emit("ERROR", 17, "#{attrs['exception.type']}: #{attrs['exception.message']}", attrs, context)
     end

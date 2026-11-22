@@ -91,12 +91,7 @@ module Zharp
     # Included in a SemanticLogger::Subscriber subclass made when semantic_logger is present.
     module SemanticAppender
       def log(log)
-        if log.exception && !Errors.reported?(log.exception)
-          Zharp.report(log.exception, handled: true)
-        end
-        return true unless Logs.sending
-
-        name, number = SEMANTIC[log.level] || SEMANTIC[:info]
+        # semantic_logger writes on its own thread: the line's context is the one taken when it was logged.
         ids = log.respond_to?(:__zharp_ids) ? log.__zharp_ids : nil
         context = nil
         if ids
@@ -105,6 +100,12 @@ module Zharp
           )
           context = ::OpenTelemetry::Trace.context_with_span(::OpenTelemetry::Trace.non_recording_span(span_context))
         end
+        if log.exception && !Errors.reported?(log.exception)
+          Zharp.report(log.exception, handled: true, context: context)
+        end
+        return true unless Logs.sending
+
+        name, number = SEMANTIC[log.level] || SEMANTIC[:info]
         attributes = { "log.logger" => log.name.to_s }
         (log.named_tags || {}).each { |k, v| attributes["log.tag.#{k}"] = v.to_s }
         (log.payload || {}).each { |k, v| attributes[k.to_s] = Context.plain_value(v) } if log.payload.is_a?(Hash)

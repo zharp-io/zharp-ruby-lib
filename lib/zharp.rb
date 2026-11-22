@@ -93,7 +93,7 @@ module Zharp
     end
 
     # @api private: one report, as a log record in the current context.
-    def report(error, handled:, attributes: {}, fatal: false)
+    def report(error, handled:, attributes: {}, fatal: false, context: nil)
       return if @state.nil? || !error.is_a?(Exception) || Errors.reported?(error)
 
       Errors.mark(error)
@@ -101,7 +101,7 @@ module Zharp
       attrs.merge!(Errors.query_of(error))
       attrs.merge!(Errors.attributes(error, handled))
       message = attrs["exception.message"].to_s
-      Logs.emit(fatal ? "FATAL" : "ERROR", fatal ? 21 : 17, message.empty? ? attrs["exception.type"] : "#{attrs['exception.type']}: #{message}", attrs)
+      Logs.emit(fatal ? "FATAL" : "ERROR", fatal ? 21 : 17, message.empty? ? attrs["exception.type"] : "#{attrs['exception.type']}: #{message}", attrs, context)
     rescue StandardError => e
       debug("report: #{e.message}")
     end
