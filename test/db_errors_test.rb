@@ -101,6 +101,7 @@ class HeldErrorsTest < Minitest::Test
   def test_database_calls_with_nothing_around_them_are_not_traced
     tracer.in_span("PIPELINED", kind: :client, attributes: { "db.system" => "redis" }) {}
     tracer.in_span("ActiveRecord.transaction") { tracer.in_span("EXECUTE shop", kind: :client, attributes: { "db.system" => "postgresql" }) {} }
+    tracer.in_span("SolidQueue::Process query") {}
     tracer.in_span("GET /x", kind: :server) { tracer.in_span("GET", kind: :client, attributes: { "db.system" => "redis" }) {} }
     assert_equal ["GET", "GET /x"], spans.map(&:name)
   end

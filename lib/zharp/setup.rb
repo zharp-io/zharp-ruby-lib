@@ -24,13 +24,16 @@ module Zharp
     class Sampler
       DROP = ::OpenTelemetry::SDK::Trace::Samplers::Result.new(decision: ::OpenTelemetry::SDK::Trace::Samplers::Decision::DROP, tracestate: ::OpenTelemetry::Trace::Tracestate::DEFAULT)
 
+      # Active Record spans on the job runners' own tables (SolidQueue::Process query, …).
+      JOB_RUNNER_MODELS = /\A(SolidQueue|GoodJob|Delayed)::/
+
       def initialize(root)
         @root = root
       end
 
       def should_sample?(trace_id:, parent_context:, links:, name:, kind:, attributes:)
         return DROP if kind == :client && attributes && (attributes["db.system"] || attributes["db.system.name"])
-        return DROP if name == "ActiveRecord.transaction"
+        return DROP if name == "ActiveRecord.transaction" || JOB_RUNNER_MODELS.match?(name.to_s)
 
         @root.should_sample?(trace_id: trace_id, parent_context: parent_context, links: links, name: name, kind: kind, attributes: attributes)
       end
