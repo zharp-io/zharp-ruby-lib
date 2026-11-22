@@ -51,6 +51,10 @@ option commented out (with `--key` it also stores the key in the credentials):
 bin/rails generate zharp:install --key=zpk_…
 ```
 
+Puma in cluster mode with `preload_app!` prints "Detected 2 Thread(s) started in app boot": those
+are OpenTelemetry's export threads in the master process. Each worker starts its own after the fork
+and sends over a connection of its own; nothing needs changing.
+
 ## Rack apps: Sinatra, Hanami, Roda, Grape, plain Rack
 
 ```sh
