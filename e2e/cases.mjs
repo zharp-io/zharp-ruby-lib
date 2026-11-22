@@ -68,6 +68,15 @@ export const CASES = {
     services: ['web'],
     steps: () => web('http://localhost:3193', { ok: '/carts/42', crash: '/carts/7/total' }),
   },
+  sidekiq: {
+    services: ['sidekiq'],
+    settle: 20_000,
+    steps: async ({ compose }) => {
+      await new Promise((r) => setTimeout(r, 8000));
+      const run = compose(['run', '--rm', 'enqueue'], { timeout: 300_000 });
+      return [{ exit: run.status, stderr: run.stderr.slice(-1500) }];
+    },
+  },
   script: {
     up: false,
     steps: async ({ compose }) => {

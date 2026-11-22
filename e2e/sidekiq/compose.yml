@@ -1,0 +1,32 @@
+# Sidekiq outside Rails (require "zharp/sidekiq"), Ruby 3.4.
+x-app: &app
+  image: ruby:3.4
+  working_dir: /app
+  volumes: [".:/app", "../..:/gem:ro", "bundle:/usr/local/bundle"]
+  environment:
+    REDIS_URL: redis://redis:6379/0
+    ZHARP_KEY: ${ZHARP_KEY}
+    ZHARP_ENDPOINT: ${ZHARP_ENDPOINT:-http://host.docker.internal:3000/api/v1/otlp}
+    ZHARP_SERVICE: e2e-sidekiq
+  extra_hosts: ["host.docker.internal:host-gateway"]
+
+services:
+  redis:
+    image: redis:8
+  setup:
+    <<: *app
+    command: sh -c 'gem install -N bundler -v "~> 4.0" >/dev/null && bundle install --quiet'
+  sidekiq:
+    <<: *app
+    depends_on: { setup: { condition: service_completed_successfully }, redis: { condition: service_started } }
+    command: bundle exec sidekiq -r ./worker.rb
+  enqueue:
+    <<: *app
+    depends_on: { setup: { condition: service_completed_successfully }, redis: { condition: service_started } }
+    profiles: ["run"]
+    command: bundle exec ruby enqueue.rb
+
+volumes:
+  bundle:
+    external: true
+    name: zharp-e2e-bundle-rb34

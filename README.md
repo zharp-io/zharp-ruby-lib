@@ -86,11 +86,15 @@ ends the script is reported and sent before it exits.
 
 ### Sidekiq outside Rails
 
-```sh
-bundle exec sidekiq -r ./worker.rb -r zharp/sidekiq
+At the top of the file Sidekiq loads (`bundle exec sidekiq -r ./worker.rb`), with `ZHARP_KEY` in
+the environment:
+
+```ruby
+require "zharp/sidekiq"
 ```
 
-(In a Rails app Sidekiq needs nothing.)
+Sidekiq keeps only one `-r`, so this goes in that file rather than on the command line. Jobs queued
+from a traced request or span run in its trace. (In a Rails app Sidekiq needs nothing.)
 
 ## Settings
 

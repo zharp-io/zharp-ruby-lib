@@ -8,7 +8,7 @@ Ruby 3.3+, Rails 7.1+.
 
 - Rails starts it by itself (a Railtie); `bin/rails generate zharp:install` writes
   `config/initializers/zharp.rb` and can store the key in the credentials.
-- Rack apps: `use Zharp::Rack`. Plain Ruby: `Zharp.init`. Sidekiq outside Rails: `-r zharp/sidekiq`.
+- Rack apps: `use Zharp::Rack`. Plain Ruby: `Zharp.init`. Sidekiq outside Rails: `require "zharp/sidekiq"` in the file Sidekiq loads.
 - Settings from `ZHARP_KEY`, `ZHARP_SERVICE`, `ZHARP_ENVIRONMENT`, `ZHARP_RELEASE`,
   `ZHARP_ENDPOINT`, `ZHARP_SAMPLE_RATE`, `ZHARP_LOGS`, `ZHARP_LOG_CORRELATION`,
   `ZHARP_CAPTURE_HEADERS`, `ZHARP_CAPTURE_QUERY_ERRORS`, `ZHARP_CAPTURE_SOURCE_CONTEXT`,
