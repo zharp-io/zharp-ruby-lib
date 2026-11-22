@@ -36,5 +36,14 @@ Gem::Specification.new do |spec|
   spec.add_dependency "opentelemetry-exporter-otlp", "~> 0.37"
   spec.add_dependency "opentelemetry-logs-sdk", "~> 0.8"
   spec.add_dependency "opentelemetry-exporter-otlp-logs", "~> 0.7"
-  spec.add_dependency "opentelemetry-instrumentation-all", "~> 0.102"
+  # A hand-picked set rather than opentelemetry-instrumentation-all (~60 gems, which Bundler 2.x
+  # takes many minutes to resolve). Each one only switches on when its library is loaded.
+  # Rails brings Action Pack (and Rack), Action View, Active Record, Active Job, Active Support,
+  # Action Mailer, Active Storage and concurrent-ruby.
+  {
+    "rack" => "~> 0.32", "rails" => "~> 0.42", "sinatra" => "~> 0.31", "grape" => "~> 0.7",
+    "net_http" => "~> 0.30", "faraday" => "~> 0.33", "http" => "~> 0.30", "httpx" => "~> 0.8",
+    "pg" => "~> 0.37", "mysql2" => "~> 0.34", "trilogy" => "~> 0.69", "redis" => "~> 0.29",
+    "sidekiq" => "~> 0.29", "resque" => "~> 0.9", "delayed_job" => "~> 0.26"
+  }.each { |name, version| spec.add_dependency "opentelemetry-instrumentation-#{name}", version }
 end
