@@ -138,7 +138,7 @@ e2e/generator.sh 3.4 8.1.0  # rails new, bundle add zharp, the generator, boot
 ZHARP_API=http://localhost:3000/api/v1 ZHARP_TOKEN=<user JWT> ZHARP_WORKSPACE=<id> node e2e/run.mjs rails81
 ```
 
-Use Bundler 2.7 or newer: with the Bundler 2.6 that Ruby 3.4's image ships, resolving
+Use Bundler 4: with Bundler 2.6 (what Ruby 3.4's image ships) or 2.7, resolving
 `opentelemetry-instrumentation-all` can take many minutes.
 
 ## License

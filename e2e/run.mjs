@@ -73,6 +73,10 @@ for (const name of process.argv.slice(2)) {
     if (kase.compose !== false) result.output = compose(['logs', '--no-color', '--tail', '400', ...(kase.logServices ?? [])]).stdout;
     writeFileSync(join(out, `${name}.json`), JSON.stringify(result, null, 2));
     console.log((kase.summary ?? summary)(result));
+  } catch (error) {
+    // One case failing (a network hiccup while installing gems) doesn't stop the others.
+    console.log(`!!! ${name} failed: ${error.message}`);
+    process.exitCode = 1;
   } finally {
     if (process.env.KEEP !== '1') {
       if (kase.compose !== false) compose(['down', '-v', '--remove-orphans'], { timeout: 300_000 });

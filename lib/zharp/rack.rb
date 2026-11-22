@@ -63,6 +63,8 @@ module Zharp
         if span&.recording? && !Errors.reported?(e) && !e.is_a?(SystemExit) && !e.is_a?(SignalException)
           span.record_exception(e, attributes: { "zharp.handled" => "false" })
           span.status = ::OpenTelemetry::Trace::Status.error(e.class.name)
+          # No response left the app: the server (Puma, Unicorn) answers 500.
+          span.set_attribute("http.response.status_code", 500)
           Rack.name_span(span, env)
         end
         raise

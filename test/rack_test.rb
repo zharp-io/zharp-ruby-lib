@@ -48,6 +48,7 @@ class RackTest < Minitest::Test
     assert_equal 1, exception_events.size
     assert_equal "false", exception_events.first.attributes["zharp.handled"]
     assert_equal OpenTelemetry::Trace::Status::ERROR, server.status.code
+    assert_equal 500, server.attributes["http.response.status_code"]
   end
 
   def test_nested_rack_middleware_makes_no_second_span
