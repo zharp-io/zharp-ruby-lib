@@ -55,13 +55,13 @@ module Zharp
         # Before the exporter, so a held exception is reported before its trace ships.
         Errors.db_errors = DbErrors::Processor.new(method(:send_held_error), queries: options.capture_query_errors)
         tracer_provider.add_span_processor(Errors.db_errors)
-        tracer_provider.add_span_processor(batch ? ::OpenTelemetry::SDK::Trace::Export::BatchSpanProcessor.new(span_exporter, start_thread_on_boot: false) : ::OpenTelemetry::SDK::Trace::Export::SimpleSpanProcessor.new(span_exporter))
+        tracer_provider.add_span_processor(batch ? ::OpenTelemetry::SDK::Trace::Export::BatchSpanProcessor.new(span_exporter) : ::OpenTelemetry::SDK::Trace::Export::SimpleSpanProcessor.new(span_exporter))
         ::OpenTelemetry.tracer_provider = tracer_provider
       end
 
       logger_provider = ::OpenTelemetry::SDK::Logs::LoggerProvider.new(resource: resource)
       logger_provider.add_log_record_processor(Context::LogProcessor.new)
-      logger_provider.add_log_record_processor(batch ? ::OpenTelemetry::SDK::Logs::Export::BatchLogRecordProcessor.new(log_exporter, start_thread_on_boot: false) : ::OpenTelemetry::SDK::Logs::Export::SimpleLogRecordProcessor.new(log_exporter))
+      logger_provider.add_log_record_processor(batch ? ::OpenTelemetry::SDK::Logs::Export::BatchLogRecordProcessor.new(log_exporter) : ::OpenTelemetry::SDK::Logs::Export::SimpleLogRecordProcessor.new(log_exporter))
       ::OpenTelemetry.logger_provider = logger_provider
 
       ::OpenTelemetry.propagation = ::OpenTelemetry::Context::Propagation::CompositeTextMapPropagator.compose_propagators(
