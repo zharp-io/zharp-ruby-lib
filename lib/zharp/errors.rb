@@ -14,6 +14,25 @@ module Zharp
     # The statement, the constraint and the code say enough.
     PRIVATE_LINES = /^[ \t]*DETAIL:.*(?:\r?\n|\z)/
 
+    # Values inside the messages themselves, each replaced by a quoted ?.
+    PRIVATE_VALUES = {
+      # MySQL 1062 (mysql2, trilogy): Duplicate entry 'a@b.c' for key 'users.index_users_on_email'
+      /(Duplicate entry )'.*?'(?= for key)/m => "'?'",
+      # MySQL 1366/1292: Incorrect integer value: 'abc' for column 'age' at row 1
+      /(Incorrect [\w ]+? value: )'.*?'(?= for |\s*\z)/m => "'?'",
+      # MySQL 1292: Truncated incorrect DOUBLE value: 'abc'
+      /(Truncated incorrect [\w ]+? value: )'.*?'/m => "'?'",
+      # Postgres: invalid input syntax for type integer: "abc"
+      /(invalid input syntax for type [\w ]+?: )".*?"/m => '"?"',
+      # Postgres: invalid input value for enum mood: "x"
+      /(invalid input value for enum \S+: )".*?"/m => '"?"',
+      # Postgres: value "123456789012" is out of range for type integer
+      /(value )".*?"(?= is out of range)/m => '"?"'
+    }.freeze
+    # Drivers whose messages are scrubbed. MySQL's 1048/1265/1452 and Postgres's other messages
+    # carry no values (a not-null or foreign-key violation's row is in its DETAIL line).
+    DB_ERROR_CLASSES = ["PG::", "Mysql2::", "Trilogy", "ActiveRecord::", "SQLite3::"].freeze
+
     class << self
       # The failed-query watcher (DbErrors::Processor) when tracing is on.
       attr_accessor :db_errors
@@ -40,7 +59,7 @@ module Zharp
       def db_error?(error)
         related(error).any? do |e|
           name = e.class.name.to_s
-          name.start_with?("PG::", "Mysql2::", "Trilogy", "ActiveRecord::", "SQLite3::") && e.message.to_s.include?("DETAIL:")
+          name.start_with?(*DB_ERROR_CLASSES)
         end
       end
 
@@ -56,7 +75,9 @@ module Zharp
       end
 
       def scrub(text)
-        text.to_s.gsub(PRIVATE_LINES, "")
+        text = text.to_s.gsub(PRIVATE_LINES, "")
+        PRIVATE_VALUES.each { |pattern, value| text = text.gsub(pattern) { "#{Regexp.last_match(1)}#{value}" } }
+        text
       end
 
       def message_of(error)
