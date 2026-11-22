@@ -191,7 +191,9 @@ module Zharp
            !error.is_a?(SignalException) && !Errors.reported?(error)
           report(error, handled: false, fatal: true)
         end
-        shutdown
+        # A flush, not a shutdown: at_exit blocks run last-registered first, and one registered
+        # before Zharp started (Minitest's, a CLI framework's) may still do traced work after this.
+        flush(timeout: 5)
       end
     end
   end

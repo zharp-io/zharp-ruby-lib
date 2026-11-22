@@ -1,0 +1,7 @@
+# frozen_string_literal: true
+
+eval_gemfile "../Gemfile"
+
+gem "railties", "~> 8.1.0"
+gem "actionpack", "~> 8.1.0"
+gem "activejob", "~> 8.1.0"
