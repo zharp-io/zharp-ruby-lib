@@ -1,0 +1,14 @@
+# Zharp Application Monitoring. Rails starts it without this file: what's here only changes the
+# defaults. The key comes from ZHARP_KEY, then credentials (zharp.key).
+Zharp.init(
+  # service: "<%= Rails.application.class.name.to_s.split("::").first.to_s.gsub(/([a-z\d])([A-Z])/, '\1-\2').downcase %>",          # ZHARP_SERVICE
+  # environment: Rails.env,          # ZHARP_ENVIRONMENT
+  # release: ENV["GIT_SHA"],         # ZHARP_RELEASE: the version you deploy, for "new in this release"
+  # sample_rate: 1.0,                # ZHARP_SAMPLE_RATE: share of traces kept; errors are always sent
+  # logs: false,                     # ZHARP_LOGS: send log lines from here (off: the Zharp agent reads them)
+  # log_correlation: true,           # ZHARP_LOG_CORRELATION: " trace_id=… span_id=…" at the end of each line
+  # capture_headers: { redact: ["x-tenant"] }, # more header names to filter; false turns headers off
+  # capture_query_errors: true,      # a failed query is reported once, with its statement
+  # capture_source_context: true,    # the code around each error's lines is sent with it
+  # instrumentation: { "OpenTelemetry::Instrumentation::Sidekiq" => { span_naming: :job_class } },
+)

@@ -1,0 +1,120 @@
+# frozen_string_literal: true
+
+module Zharp
+  # Errors: one report per exception, marked handled or not.
+  #
+  # An exception that escapes a request is seen several times: Action Pack records it on the
+  # request's span, Rails reports it to Rails.error, the Rack middleware sees it, a job runner's
+  # error handler gets it. The first sighting reports it and marks the exception object; later ones
+  # keep their span status but don't report it again.
+  module Errors
+    MARK = :@__zharp_reported
+
+    # Lines of a database error that carry the row's values: Postgres's "DETAIL:  Key (email)=(…)".
+    # The statement, the constraint and the code say enough.
+    PRIVATE_LINES = /^[ \t]*DETAIL:.*(?:\r?\n|\z)/
+
+    class << self
+      # The failed-query watcher (DbErrors::Processor) when tracing is on.
+      attr_accessor :db_errors
+
+      def reported?(error)
+        !error.nil? && error.instance_variable_defined?(MARK) && error.instance_variable_get(MARK) == true
+      rescue StandardError
+        false
+      end
+
+      def mark(error)
+        error&.instance_variable_set(MARK, true)
+      rescue StandardError # a frozen exception
+        nil
+      end
+
+      # The query attributes of the failed query this error came from, if any ({} when none).
+      def query_of(error)
+        db_errors ? (db_errors.claim(error) || {}) : {}
+      rescue StandardError
+        {}
+      end
+
+      def db_error?(error)
+        related(error).any? do |e|
+          name = e.class.name.to_s
+          name.start_with?("PG::", "Mysql2::", "Trilogy", "ActiveRecord::", "SQLite3::") && e.message.to_s.include?("DETAIL:")
+        end
+      end
+
+      # An exception and what it wraps (ActiveRecord::StatementInvalid's cause is the driver's error).
+      def related(error)
+        out = [error]
+        inner = error.respond_to?(:cause) ? error.cause : nil
+        while inner && out.size < 5 && !out.include?(inner)
+          out << inner
+          inner = inner.cause
+        end
+        out
+      end
+
+      def scrub(text)
+        text.to_s.gsub(PRIVATE_LINES, "")
+      end
+
+      def message_of(error)
+        message = error.message.to_s
+        db_error?(error) ? scrub(message).rstrip : message
+      end
+
+      # The stack as Ruby prints it, innermost first: what OpenTelemetry's record_exception sends.
+      def stack_of(error)
+        stack = error.full_message(highlight: false, order: :top)
+        stack = scrub(stack) if db_error?(error)
+        stack.encode("UTF-8", invalid: :replace, undef: :replace, replace: "�")
+      rescue StandardError
+        "#{error.class}: #{error.message}"
+      end
+
+      def attributes(error, handled)
+        attrs = {
+          "exception.type" => error.class.name.to_s,
+          "exception.message" => message_of(error),
+          "exception.stacktrace" => stack_of(error),
+          "zharp.handled" => handled ? "true" : "false"
+        }
+        code = Source.of_exception(error)
+        attrs[Source::ATTRIBUTE] = code if code
+        attrs
+      end
+    end
+
+    # Span#record_exception skips an exception already reported, holds a failed query's exception
+    # (DbErrors) and says handled=false: instrumentations call it for an exception that escaped
+    # their span, which is what an uncaught error is. A caller that knows better passes
+    # "zharp.handled" => "true".
+    module RecordException
+      def record_exception(exception, attributes: nil)
+        return if Errors.reported?(exception)
+        return if Errors.db_errors&.hold(self, exception)
+
+        Errors.mark(exception)
+        merged = { "zharp.handled" => "false" }
+        merged.merge!(Errors.query_of(exception))
+        code = Source.of_exception(exception)
+        merged[Source::ATTRIBUTE] = code if code
+        if Errors.db_error?(exception)
+          merged["exception.message"] = Errors.message_of(exception)
+          merged["exception.stacktrace"] = Errors.stack_of(exception)
+        end
+        merged.merge!(attributes) if attributes
+        super(exception, attributes: merged)
+      rescue StandardError => e
+        Zharp.debug("record_exception: #{e.message}")
+        super
+      end
+    end
+
+    def self.patch_record_exception
+      span = ::OpenTelemetry::SDK::Trace::Span
+      span.prepend(RecordException) unless span.ancestors.include?(RecordException)
+    end
+  end
+end
