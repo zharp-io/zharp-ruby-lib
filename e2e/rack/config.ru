@@ -14,6 +14,9 @@ LOG = Logger.new($stdout)
 
 APP = lambda do |env|
   case env["PATH_INFO"]
+  when "/orders"
+    order = env["rack.input"].read
+    [422, { "content-type" => "application/json" }, [%({"error":"card declined","order":#{order},"session_token":"s-1"})]]
   when %r{\A/carts/\d+/total\z} then [200, { "content-type" => "text/plain" }, [Cart.new([nil]).total.to_s]]
   when %r{\A/carts/(\d+)\z}
     LOG.info("showing cart #{$1}")

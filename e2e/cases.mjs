@@ -40,6 +40,7 @@ async function web(base, routes) {
     steps.push(await call(base, 'POST', routes.unique, { body: { email } }));
     if (routes.uniqueQuiet) steps.push(await call(base, 'POST', routes.uniqueQuiet, { body: { email } }));
   }
+  if (routes.bodies) steps.push(await call(base, 'POST', routes.bodies, { body: { item: 'book', password: 'hunter2', card: '4242' } }));
   if (routes.failingJob) steps.push(await call(base, 'GET', routes.failingJob));
   return steps;
 }
@@ -62,7 +63,7 @@ export const CASES = {
   },
   rack: {
     services: ['web'],
-    steps: () => web('http://localhost:3192', { ok: '/carts/42', crash: '/carts/7/total' }),
+    steps: () => web('http://localhost:3192', { ok: '/carts/42', crash: '/carts/7/total', bodies: '/orders' }),
   },
   hanami: {
     services: ['web'],

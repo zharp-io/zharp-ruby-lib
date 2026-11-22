@@ -3,7 +3,9 @@
 ## 0.1.0 (unreleased)
 
 The first release: one `zharp` gem for Rails, Rack apps, Sidekiq and plain Ruby, built on the
-official OpenTelemetry SDK (`opentelemetry-sdk` 1.13, `opentelemetry-instrumentation-all` 0.102).
+official OpenTelemetry SDK (`opentelemetry-sdk` 1.13) and its instrumentations for Rack, Rails,
+Sinatra, Grape, Net::HTTP, Faraday, HTTP.rb, HTTPX, pg, mysql2, trilogy, Redis, Sidekiq, Resque and
+Delayed Job.
 Ruby 3.3+, Rails 7.1+.
 
 - Rails starts it by itself (a Railtie); `bin/rails generate zharp:install` writes
@@ -21,6 +23,11 @@ Ruby 3.3+, Rails 7.1+.
 - Sidekiq and Active Job jobs in the trace of the request that queued them.
 - ` trace_id=… span_id=…` at the end of each `Logger` and semantic_logger line in a request;
   `ZHARP_LOGS=true` sends the lines from the SDK.
+- `capture_bodies` (off by default): request and response bodies on Rack and Net::HTTP spans,
+  secrets filtered, files and binary bodies described, 32 KB cap. Secret query values are masked
+  in every span's URL.
+- Database error messages carry no values: Postgres's `DETAIL:` line, MySQL's `Duplicate entry
+  '…'`, invalid-input values.
 - Fork safety for Puma cluster mode and Unicorn: each worker's exporters get their own connection.
 - `Zharp.capture_error`, `set_user`, `clear_user`, `set_tag`, `log`, `start_span`, `flush`,
   `shutdown`.

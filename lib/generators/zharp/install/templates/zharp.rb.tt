@@ -10,5 +10,6 @@ Zharp.init(
   # capture_headers: { redact: ["x-tenant"] }, # more header names to filter; false turns headers off
   # capture_query_errors: true,      # a failed query is reported once, with its statement
   # capture_source_context: true,    # the code around each error's lines is sent with it
+  # capture_bodies: "errors",        # ZHARP_CAPTURE_BODIES: bodies of failed requests ("all": every one)
   # instrumentation: { "OpenTelemetry::Instrumentation::Sidekiq" => { span_naming: :job_class } },
 )

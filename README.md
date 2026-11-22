@@ -5,9 +5,9 @@ One gem for Rails, any Rack app (Sinatra, Hanami, Roda, Grape), Sidekiq and plai
 the official OpenTelemetry SDK.
 
 - Requests named by route, continuing the caller's `traceparent`; database queries (pg, mysql2,
-  trilogy, Active Record), outgoing HTTP (Net::HTTP, Faraday, HTTP.rb, Excon…), Redis, GraphQL,
-  AWS SDK and the rest of `opentelemetry-instrumentation-all`, each switched on when its library is
-  loaded.
+  trilogy, Active Record), outgoing HTTP (Net::HTTP, Faraday, HTTP.rb, HTTPX), Redis, jobs
+  (Sidekiq, Active Job, Resque, Delayed Job), Action View and Action Mailer, each switched on when
+  its library is loaded. Anything else you instrument with OpenTelemetry is sent too.
 - **Errors, each counted once**, with type, message, the stack and the code that ran (the lines
   around your app's innermost five frames, read on your server; never gems or Ruby's library).
 - **Request and response headers** on the request's span, secrets (authorization, cookies, API
@@ -113,9 +113,26 @@ Every setting can be passed to `Zharp.init` or set in the environment.
 | `capture_headers:` | `ZHARP_CAPTURE_HEADERS` | on; `{ redact: ["x-tenant"] }` filters more names |
 | `capture_query_errors:` | `ZHARP_CAPTURE_QUERY_ERRORS` | `true` |
 | `capture_source_context:` | `ZHARP_CAPTURE_SOURCE_CONTEXT` | `true` |
+| `capture_bodies:` | `ZHARP_CAPTURE_BODIES` (`errors`, `all`, `off`) | off |
 | `tracing:` | `ZHARP_TRACING` | `true`; `false` sends errors and logs only |
 | `instrumentation:` | — | options per OpenTelemetry instrumentation, by class name |
 | — | `ZHARP_DISABLED=true` | turns everything off |
+
+### Request and response bodies
+
+Off by default. `capture_bodies: "errors"` (or `true`) keeps the bodies of failed requests (status
+400 and above, or no response), `"all"` of every request: incoming requests (any Rack app, Rails
+included) and outgoing Net::HTTP calls (Faraday's default adapter too).
+
+```ruby
+Zharp.init(capture_bodies: { mode: "errors", max_size: 32_768, redact_keys: ["date_of_birth"], urls: ["api.example.com"] })
+```
+
+Text is capped at 32 KB (`max_size`, at most 128 KB). Files in uploads, inline images and binary
+bodies are described (name, type, size), never sent. Field names are kept; values under
+secret-looking keys (`password`, `token`, `authorization`, `card`…) and `redact_keys` become
+`[Filtered]` before anything is sent. `urls` limits it to some requests (a host, a URL prefix or a
+Regexp). Secret-looking query values in URLs are masked on every span either way.
 
 ## API
 
@@ -146,8 +163,7 @@ e2e/generator.sh 3.4 8.1.0  # rails new, bundle add zharp, the generator, boot
 ZHARP_API=http://localhost:3000/api/v1 ZHARP_TOKEN=<user JWT> ZHARP_WORKSPACE=<id> node e2e/run.mjs rails81
 ```
 
-Use Bundler 4: with Bundler 2.6 (what Ruby 3.4's image ships) or 2.7, resolving
-`opentelemetry-instrumentation-all` can take many minutes.
+`e2e/bundler-check.sh` times `bundle add zharp` in fresh Rails apps with Bundler 2.6, 2.7 and 4.
 
 ## License
 

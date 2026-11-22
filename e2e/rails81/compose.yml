@@ -15,6 +15,7 @@ x-app: &app
     ZHARP_KEY: ${ZHARP_KEY}
     ZHARP_ENDPOINT: ${ZHARP_ENDPOINT:-http://host.docker.internal:3000/api/v1/otlp}
     ZHARP_SERVICE: e2e-rails81
+    ZHARP_CAPTURE_BODIES: errors
     RAILS_LOG_TO_STDOUT: "1"
   extra_hosts: ["host.docker.internal:host-gateway"]
 
