@@ -37,16 +37,33 @@ module Zharp
       # The failed-query watcher (DbErrors::Processor) when tracing is on.
       attr_accessor :db_errors
 
+      # Reported already: this exception itself, or one it wraps that escaped (unhandled). A wrapper
+      # and what it wraps (ActionView::Template::Error around the template's NoMethodError) are one
+      # failure. An exception the app reported as handled and then wrapped in a new one it raised
+      # doesn't hide the new one.
       def reported?(error)
-        !error.nil? && error.instance_variable_defined?(MARK) && error.instance_variable_get(MARK) == true
+        return false if error.nil?
+        return true if marked(error)
+
+        related(error).drop(1).any? { |e| marked(e) == :unhandled }
       rescue StandardError
         false
       end
 
-      def mark(error)
-        error&.instance_variable_set(MARK, true)
-      rescue StandardError # a frozen exception
-        nil
+      def marked(error)
+        error.instance_variable_defined?(MARK) ? error.instance_variable_get(MARK) : nil
+      end
+
+      # Marks the exception; an unhandled one marks its causes too, so whichever of a wrapper and
+      # its cause is seen second is not reported again.
+      def mark(error, handled: false)
+        return if error.nil?
+
+        (handled ? [error] : related(error)).each do |e|
+          e.instance_variable_set(MARK, handled ? :handled : :unhandled) unless marked(e) == :unhandled
+        rescue StandardError # a frozen exception
+          nil
+        end
       end
 
       # The query attributes of the failed query this error came from, if any ({} when none).
@@ -116,7 +133,7 @@ module Zharp
         return if Errors.reported?(exception)
         return if Errors.db_errors&.hold(self, exception)
 
-        Errors.mark(exception)
+        Errors.mark(exception, handled: attributes.is_a?(Hash) && attributes["zharp.handled"] == "true")
         merged = { "zharp.handled" => "false" }
         merged.merge!(Errors.query_of(exception))
         code = Source.of_exception(exception)

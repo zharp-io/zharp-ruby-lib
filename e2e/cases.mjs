@@ -33,7 +33,9 @@ async function web(base, routes) {
       'x-request-id': 'req-1',
     },
   }));
-  if (routes.crash) steps.push(await call(base, 'GET', routes.crash));
+  // Each failure twice: the two occurrences must group into one issue.
+  if (routes.crash) for (const n of [7, 8]) steps.push(await call(base, 'GET', routes.crash.replace('7', String(n))));
+  if (routes.erb) for (const n of [1, 2]) steps.push(await call(base, 'GET', `${routes.erb}/${n}`));
   if (routes.unique) {
     const email = `dup-${Date.now()}@example.com`;
     steps.push(await call(base, 'POST', routes.unique, { body: { email } }));
@@ -50,12 +52,12 @@ export const CASES = {
     services: ['web', 'sidekiq', 'jobs'],
     settle: 20_000,
     steps: () => web('http://localhost:3181', {
-      ok: '/carts/42', pid: '/pid', crash: '/carts/7/total', unique: '/users', uniqueQuiet: '/users/quiet', failingJob: '/jobs/fail',
+      ok: '/carts/42', pid: '/pid', crash: '/carts/7/total', erb: '/pages', unique: '/users', uniqueQuiet: '/users/quiet', failingJob: '/jobs/fail',
     }),
   },
   rails71: {
     services: ['web'],
-    steps: () => web('http://localhost:3171', { ok: '/carts/42', crash: '/carts/7/total', unique: '/users', uniqueQuiet: '/users/quiet' }),
+    steps: () => web('http://localhost:3171', { ok: '/carts/42', crash: '/carts/7/total', erb: '/pages', unique: '/users', uniqueQuiet: '/users/quiet' }),
   },
   sinatra: {
     services: ['web'],

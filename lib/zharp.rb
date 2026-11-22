@@ -98,7 +98,7 @@ module Zharp
     def report(error, handled:, attributes: {}, fatal: false, context: nil)
       return if @state.nil? || !error.is_a?(Exception) || Errors.reported?(error)
 
-      Errors.mark(error)
+      Errors.mark(error, handled: handled)
       attrs = Context.plain(attributes)
       attrs.merge!(Errors.query_of(error))
       attrs.merge!(Errors.attributes(error, handled))

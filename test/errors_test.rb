@@ -87,3 +87,40 @@ class ErrorsTest < Minitest::Test
     assert_equal "s-1", spans.first.attributes["session.id"]
   end
 end
+
+class WrappedErrorsTest < Minitest::Test
+  include ZharpTest
+
+  class TemplateError < StandardError; end
+
+  def wrapped
+    begin
+      nil.total
+    rescue NoMethodError
+      raise TemplateError, "undefined method 'total' for nil"
+    end
+  rescue TemplateError => e
+    e
+  end
+
+  # Action View raises ActionView::Template::Error around the template's NoMethodError; Action Pack
+  # reports one and the Rack layer the other: one failure, one report, either way round.
+  def test_a_wrapper_and_its_cause_are_reported_once
+    [[:itself, :cause], [:cause, :itself]].each do |order|
+      SPANS.reset
+      error = wrapped
+      tracer.in_span("GET /pages/:id", kind: :server) do |span|
+        order.each { |which| span.record_exception(which == :itself ? error : error.cause) }
+      end
+      assert_equal 1, exception_events.size, order.inspect
+    end
+  end
+
+  def test_an_error_reported_as_handled_does_not_hide_the_one_raised_from_it
+    error = wrapped
+    Zharp.capture_error(error.cause)
+    tracer.in_span("GET /x", kind: :server) { |span| span.record_exception(error) }
+    assert_equal 1, errors.size
+    assert_equal 1, exception_events.size
+  end
+end

@@ -169,7 +169,7 @@ module Zharp
     def send_held_error(error, stack, attributes, span_context)
       return if Errors.reported?(error)
 
-      Errors.mark(error)
+      Errors.mark(error, handled: true)
       attrs = Errors.attributes(error, true).merge(attributes)
       attrs["exception.stacktrace"] = stack if stack
       attrs["zharp.mechanism"] = "db" if attributes.key?("db.system")
