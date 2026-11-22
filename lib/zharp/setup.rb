@@ -17,9 +17,10 @@ module Zharp
       "OpenTelemetry::Instrumentation::ActiveJob" => { propagation_style: :child }
     }.freeze
 
-    # Root spans: the share sample_rate keeps, except a Redis command with nothing around it
-    # (Sidekiq's heartbeat and poller, Action Cable's pings), which would be a trace every few
-    # seconds that says nothing. Redis inside a request or job is traced as usual.
+    # Root spans: the share sample_rate keeps, except a database or Redis call with nothing around
+    # it: job runners' pollers (Solid Queue, GoodJob, Delayed Job, Sidekiq's heartbeat) and Action
+    # Cable's pings would be a trace every second that says nothing. The same calls inside a
+    # request, a job or a span of your own (Zharp.start_span) are traced as usual.
     class Sampler
       DROP = ::OpenTelemetry::SDK::Trace::Samplers::Result.new(decision: ::OpenTelemetry::SDK::Trace::Samplers::Decision::DROP, tracestate: ::OpenTelemetry::Trace::Tracestate::DEFAULT)
 
@@ -28,7 +29,8 @@ module Zharp
       end
 
       def should_sample?(trace_id:, parent_context:, links:, name:, kind:, attributes:)
-        return DROP if kind == :client && attributes && (attributes["db.system"] || attributes["db.system.name"]) == "redis"
+        return DROP if kind == :client && attributes && (attributes["db.system"] || attributes["db.system.name"])
+        return DROP if name == "ActiveRecord.transaction"
 
         @root.should_sample?(trace_id: trace_id, parent_context: parent_context, links: links, name: name, kind: kind, attributes: attributes)
       end
