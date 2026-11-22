@@ -12,20 +12,21 @@ module Zharp
   # traceparent), named by route, with every request and response header (secrets as [REDACTED]),
   # and an exception that escapes reported once. Rails needs none of this: its Railtie adds it.
   class Rack
+    # Built with the app (config.ru), so a preloading server (Puma's preload_app!, Unicorn's
+    # preload_app) starts Zharp once, before it forks.
     def initialize(app)
       @app = app
       @inner = Headers.new(app)
-      @traced = nil
+      @traced = build
     end
 
     def call(env)
-      (@traced ||= build).call(env)
+      @traced.call(env)
     end
 
     private
 
-    # OpenTelemetry's Rack middleware around Zharp's, built on the first request (Zharp.init may run
-    # after config.ru's `use` line).
+    # OpenTelemetry's Rack middleware around Zharp's.
     def build
       Zharp.init unless Zharp.active?
       instrumentation = ::OpenTelemetry::Instrumentation::Rack::Instrumentation.instance

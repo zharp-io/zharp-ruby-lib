@@ -1,0 +1,13 @@
+# A plain Ruby script that raises and exits (Ruby 3.3: the older `label' stack style).
+services:
+  script:
+    image: ruby:3.3
+    working_dir: /app
+    volumes: [".:/app", "../..:/gem:ro", "bundle:/usr/local/bundle"]
+    environment:
+      ZHARP_KEY: ${ZHARP_KEY}
+      ZHARP_ENDPOINT: ${ZHARP_ENDPOINT:-http://host.docker.internal:3000/api/v1/otlp}
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    command: sh -c 'gem install -N bundler -v "~> 4.0" >/dev/null && bundle install --quiet && ruby import.rb'
+volumes:
+  bundle:

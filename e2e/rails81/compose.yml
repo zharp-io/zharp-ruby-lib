@@ -1,0 +1,47 @@
+# Rails 8.1 on Puma in cluster mode (preload_app!), Postgres, Solid Queue, Sidekiq, lograge.
+# Run through e2e/run.mjs, which creates a throwaway Zharp app and passes ZHARP_KEY/ZHARP_ENDPOINT.
+x-app: &app
+  image: ruby:3.4
+  working_dir: /app
+  volumes:
+    - .:/app
+    - ../..:/gem:ro
+    - bundle:/usr/local/bundle
+  environment: &env
+    RAILS_ENV: production
+    SECRET_KEY_BASE: e2e-not-secret-e2e-not-secret-e2e-not-secret-e2e-not-secret
+    DATABASE_URL: postgres://postgres:postgres@db:5432/shop
+    REDIS_URL: redis://redis:6379/0
+    ZHARP_KEY: ${ZHARP_KEY}
+    ZHARP_ENDPOINT: ${ZHARP_ENDPOINT:-http://host.docker.internal:3000/api/v1/otlp}
+    ZHARP_SERVICE: e2e-rails81
+    RAILS_LOG_TO_STDOUT: "1"
+  extra_hosts: ["host.docker.internal:host-gateway"]
+
+services:
+  db:
+    image: postgres:16
+    environment: { POSTGRES_PASSWORD: postgres, POSTGRES_DB: shop }
+    healthcheck: { test: ["CMD", "pg_isready", "-U", "postgres"], interval: 2s, retries: 30 }
+  redis:
+    image: redis:8
+  setup:
+    <<: *app
+    depends_on: { db: { condition: service_healthy } }
+    command: sh -c 'gem install -N bundler -v "~> 4.0" >/dev/null && bundle install --quiet && bin/rails db:prepare && bin/rails runner "load Gem.loaded_specs[%q(solid_queue)].full_gem_path + %q(/lib/generators/solid_queue/install/templates/db/queue_schema.rb)"'
+  web:
+    <<: *app
+    depends_on: { setup: { condition: service_completed_successfully }, redis: { condition: service_started } }
+    command: bundle exec puma -C config/puma.rb
+    ports: ["3181:3000"]
+  sidekiq:
+    <<: *app
+    depends_on: { setup: { condition: service_completed_successfully }, redis: { condition: service_started } }
+    command: bundle exec sidekiq
+  jobs:
+    <<: *app
+    depends_on: { setup: { condition: service_completed_successfully } }
+    command: bundle exec rake solid_queue:start
+
+volumes:
+  bundle:

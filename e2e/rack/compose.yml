@@ -1,0 +1,16 @@
+# A plain Rack app (a lambda) on Puma, Ruby 3.4.
+services:
+  web:
+    image: ruby:3.4
+    working_dir: /app
+    volumes: [".:/app", "../..:/gem:ro", "bundle:/usr/local/bundle"]
+    environment:
+      ZHARP_KEY: ${ZHARP_KEY}
+      ZHARP_ENDPOINT: ${ZHARP_ENDPOINT:-http://host.docker.internal:3000/api/v1/otlp}
+      ZHARP_SERVICE: e2e-rack
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    command: sh -c 'gem install -N bundler -v "~> 4.0" >/dev/null && bundle install --quiet && bundle exec puma -p 3000 config.ru'
+    ports: ["3192:3000"]
+    healthcheck: { test: ["CMD", "ruby", "-rnet/http", "-e", "Net::HTTP.get(URI('http://127.0.0.1:3000/carts/1'))"], interval: 3s, retries: 100 }
+volumes:
+  bundle:
