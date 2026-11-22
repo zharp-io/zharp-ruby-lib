@@ -47,7 +47,13 @@ module Zharp
         @app = app
       end
 
+      # Where a framework leaves an exception it turned into an error page itself (Hanami, Roda and
+      # other Rack apps use rack.exception).
+      HANDLED_ERRORS = %w[rack.exception sinatra.error action_dispatch.exception].freeze
+
       def call(env)
+        # The path as it arrived: a mounted app or router may rewrite PATH_INFO on the way in.
+        path = env["PATH_INFO"].to_s
         span = Rack.server_span
         secret = Zharp.options&.capture_headers
         if span.recording? && secret
@@ -56,7 +62,8 @@ module Zharp
         status, headers, body = @app.call(env)
         if span.recording?
           span.add_attributes(Zharp::Headers.attributes("response", headers, secret)) if secret && headers
-          Rack.name_span(span, env)
+          report_rendered_error(span, env, status)
+          Rack.name_span(span, env, path)
         end
         [status, headers, body]
       rescue Exception => e # rubocop:disable Lint/RescueException
@@ -65,9 +72,23 @@ module Zharp
           span.status = ::OpenTelemetry::Trace::Status.error(e.class.name)
           # No response left the app: the server (Puma, Unicorn) answers 500.
           span.set_attribute("http.response.status_code", 500)
-          Rack.name_span(span, env)
+          Rack.name_span(span, env, path)
         end
         raise
+      end
+
+      private
+
+      # A 5xx the framework rendered from an exception it caught: that exception escaped the app's
+      # code, so it is reported, once, as unhandled.
+      def report_rendered_error(span, env, status)
+        return unless status.to_i >= 500
+
+        error = HANDLED_ERRORS.lazy.map { |key| env[key] }.find { |e| e.is_a?(Exception) }
+        return if error.nil? || Errors.reported?(error)
+
+        span.record_exception(error, attributes: { "zharp.handled" => "false" })
+        span.status = ::OpenTelemetry::Trace::Status.error(error.class.name)
       end
     end
 
@@ -82,10 +103,10 @@ module Zharp
 
       # Sinatra, Grape and Rails name the span by route themselves. Otherwise "GET /orders/:id": the
       # path with its ids replaced, so one route is one name.
-      def name_span(span, env)
+      def name_span(span, env, path = nil)
         return unless span.respond_to?(:name) && span.name.to_s.match?(Headers::METHOD_ONLY)
 
-        route = env["zharp.route"] || env["sinatra.route"]&.split&.last || quantize(env["PATH_INFO"].to_s)
+        route = env["zharp.route"] || env["sinatra.route"]&.split&.last || quantize(path || env["PATH_INFO"].to_s)
         span.name = "#{env['REQUEST_METHOD']} #{route}"
         span.set_attribute("http.route", route) unless span.attributes&.key?("http.route")
       rescue StandardError

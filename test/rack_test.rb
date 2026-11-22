@@ -62,3 +62,30 @@ class RackTest < Minitest::Test
     assert_equal 1, spans.count { |s| s.kind == :server }
   end
 end
+
+class RackRenderedErrorTest < Minitest::Test
+  include ZharpTest
+
+  # What Hanami does in production: it catches the exception, renders a 500, keeps it in rack.exception.
+  RENDERS = lambda do |env|
+    env["PATH_INFO"] = "/rewritten"
+    begin
+      nil.price
+    rescue NoMethodError => e
+      env["rack.exception"] = e
+      [500, { "content-type" => "text/plain" }, ["error"]]
+    end
+  end
+
+  def test_an_error_page_the_framework_rendered_reports_its_exception_once
+    app = Rack::Builder.new do
+      use Zharp::Rack
+      run RENDERS
+    end.to_app
+    Rack::MockRequest.new(app).get("/carts/7/total")
+    server = spans.find { |s| s.kind == :server }
+    assert_equal "GET /carts/:id/total", server.name
+    assert_equal ["NoMethodError"], exception_events.map { |e| e.attributes["exception.type"] }
+    assert_equal "false", exception_events.first.attributes["zharp.handled"]
+  end
+end
