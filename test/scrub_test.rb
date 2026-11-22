@@ -2,12 +2,12 @@
 
 require "test_helper"
 
-module Mysql2; class Error < StandardError; end; end unless defined?(Mysql2::Error)
-module Trilogy; class ProtocolError < StandardError; end; end unless defined?(Trilogy::ProtocolError)
-module PG; class InvalidTextRepresentation < StandardError; end; end unless defined?(PG::InvalidTextRepresentation)
 
 class ScrubTest < Minitest::Test
   include ZharpTest
+
+  # Driver errors by name only: defining the real modules would make OpenTelemetry think the drivers are loaded.
+  def driver_error(name, message) = Class.new(StandardError) { define_singleton_method(:name) { name } }.new(message)
 
   # The messages as the drivers word them (the MySQL one captured in the Rails 7.1 e2e run).
   CASES = {
@@ -30,9 +30,9 @@ class ScrubTest < Minitest::Test
   end
 
   def test_reported_mysql_and_trilogy_errors_carry_no_values
-    Zharp.capture_error(Mysql2::Error.new("Duplicate entry 'ann@example.com' for key 'users.email'"))
-    Zharp.capture_error(Trilogy::ProtocolError.new("1366: Incorrect integer value: 'forty' for column 'age' at row 1"))
-    Zharp.capture_error(PG::InvalidTextRepresentation.new("ERROR:  invalid input syntax for type integer: \"forty\""))
+    Zharp.capture_error(driver_error("Mysql2::Error", "Duplicate entry 'ann@example.com' for key 'users.email'"))
+    Zharp.capture_error(driver_error("Trilogy::ProtocolError", "1366: Incorrect integer value: 'forty' for column 'age' at row 1"))
+    Zharp.capture_error(driver_error("PG::InvalidTextRepresentation", "ERROR:  invalid input syntax for type integer: \"forty\""))
     errors.each do |e|
       refute_match(/ann@example|forty/, e.attributes["exception.message"])
       refute_match(/ann@example|forty/, e.attributes["exception.stacktrace"])

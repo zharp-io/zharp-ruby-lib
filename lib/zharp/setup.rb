@@ -52,6 +52,7 @@ module Zharp
           )
         )
         tracer_provider.add_span_processor(Context::SpanProcessor.new)
+        tracer_provider.add_span_processor(Capture::UrlRedaction.new)
         # Before the exporter, so a held exception is reported before its trace ships.
         Errors.db_errors = DbErrors::Processor.new(method(:send_held_error), queries: options.capture_query_errors)
         tracer_provider.add_span_processor(Errors.db_errors)
@@ -82,6 +83,8 @@ module Zharp
         logger: logger_provider.logger(name: "zharp", version: VERSION),
         instrumented: []
       )
+      # Before OpenTelemetry's Net::HTTP patch, so it runs inside that span.
+      Capture.install_net_http if options.tracing && options.capture_bodies
       state.instrumented = instrument(options) if options.tracing && options.instrument
       start_logs(options)
       state

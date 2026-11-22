@@ -17,7 +17,7 @@ module ZharpTest
   def self.start
     return if Zharp.active?
 
-    Zharp.init(key: "zpk_test", service: "unit", environment: "test", quiet: true,
+    Zharp.init(key: "zpk_test", service: "unit", environment: "test", quiet: true, capture_bodies: "errors",
                _exporters: [SPANS, LOGS], _batch: false)
   end
 

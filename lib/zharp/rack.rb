@@ -59,11 +59,14 @@ module Zharp
         if span.recording? && secret
           span.add_attributes(Zharp::Headers.attributes("request", Zharp::Headers.from_env(env), secret))
         end
+        bodies = Zharp.options&.capture_bodies
+        tee = Capture.start_request(env, bodies) if bodies && span.recording?
         status, headers, body = @app.call(env)
         if span.recording?
           span.add_attributes(Zharp::Headers.attributes("response", headers, secret)) if secret && headers
           report_rendered_error(span, env, status)
           Rack.name_span(span, env, path)
+          body = Capture.finish_request(span, env, tee, status, headers, body, bodies) if tee
         end
         [status, headers, body]
       rescue Exception => e # rubocop:disable Lint/RescueException
@@ -72,6 +75,7 @@ module Zharp
           span.status = ::OpenTelemetry::Trace::Status.error(e.class.name)
           # No response left the app: the server (Puma, Unicorn) answers 500.
           span.set_attribute("http.response.status_code", 500)
+          Capture.add(span) { Capture.request_attributes(env, tee, bodies) } if tee
           Rack.name_span(span, env, path)
         end
         raise

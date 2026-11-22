@@ -12,7 +12,7 @@ module Zharp
     Options = Struct.new(
       :key, :service, :environment, :release, :endpoint, :sample_rate,
       :tracing, :logs, :log_correlation, :capture_uncaught,
-      :capture_headers, :capture_query_errors, :capture_source_context,
+      :capture_headers, :capture_query_errors, :capture_source_context, :capture_bodies,
       :instrument, :instrumentation,
       keyword_init: true
     )
@@ -78,6 +78,7 @@ module Zharp
         capture_headers: Headers.settings(args[:capture_headers], env("ZHARP_CAPTURE_HEADERS")),
         capture_query_errors: switch(args[:capture_query_errors], "ZHARP_CAPTURE_QUERY_ERRORS", true),
         capture_source_context: switch(args[:capture_source_context], "ZHARP_CAPTURE_SOURCE_CONTEXT", true),
+        capture_bodies: Bodies.settings(args[:capture_bodies], env("ZHARP_CAPTURE_BODIES")),
         instrument: args.fetch(:instrument, true) ? true : false,
         instrumentation: args[:instrumentation] || {}
       )
